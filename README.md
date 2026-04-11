@@ -1,6 +1,6 @@
 # 🚀 PoseNeRF
 
-Welcome to **PoseNeRF** — a clean, end-to-end implementation of a **hierarchical Neural Radiance Field (NeRF)** pipeline for **camera pose estimation**, built entirely without notebooks.
+Welcome to **PoseNeRF**  a clean, end-to-end implementation of a **hierarchical Neural Radiance Field (NeRF)** pipeline for **camera pose estimation**, built entirely without notebooks.
 
 This project is designed to be:
 - 💡 Easy to run  
