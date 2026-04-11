@@ -1,162 +1,134 @@
 # 🚀 PoseNeRF
 
-Welcome to **PoseNeRF**  a clean, end-to-end implementation of a **hierarchical Neural Radiance Field (NeRF)** pipeline for **camera pose estimation**, built entirely without notebooks.
+## 🚀 Introduction
 
-This project is designed to be:
-- 💡 Easy to run  
-- 🧩 Modular and extensible  
-- 🔁 Fully reproducible  
+**PoseNeRF** is an end-to-end implementation of a **hierarchical Neural
+Radiance Field (NeRF)** framework designed for **joint scene
+representation and camera pose estimation**.
 
-Whether you're experimenting with NeRFs or building pose estimation systems, this repo provides a complete workflow in one place.
+Unlike standard NeRF pipelines that assume known camera poses, PoseNeRF
+explores a more realistic and challenging setting: **recovering accurate
+camera poses directly from images while simultaneously leveraging a
+learned radiance field**.
 
----
+The core idea is to: - First learn a **coarse-to-fine hierarchical NeRF
+representation** of a scene\
+- Then use the learned representation as a **geometric prior** to infer
+poses for unseen views\
+- Finally refine both poses and renderings through iterative
+optimization
+
+This repository translates an experimental notebook-based workflow into
+a **fully modular, script-driven pipeline**, making it easier to: -
+Reproduce results consistently\
+- Run large-scale experiments\
+- Integrate into research or production workflows
+
+The pipeline reflects a practical research setup: - Controlled training
+with reduced computational overhead\
+- Explicit separation of training, evaluation, pose estimation, and
+refinement stages\
+- Support for re-running downstream tasks without retraining
+
+------------------------------------------------------------------------
 
 ## ✨ Features
 
-- 📦 Automatic dataset download  
-- 🧠 Hierarchical NeRF training  
-- 🎥 Multiview evaluation  
-- 📍 Camera pose estimation on unseen frames  
-- 🔧 Pose refinement pipeline  
-- ⚡ Post-training reruns without retraining  
+-   📦 Automatic dataset download\
+-   🧠 Hierarchical NeRF training\
+-   🎥 Multiview evaluation\
+-   📍 Camera pose estimation on unseen frames\
+-   🔧 Pose refinement pipeline\
+-   ⚡ Post-training reruns without retraining
 
----
+------------------------------------------------------------------------
 
 ## ⚙️ Setup
 
-```bash
+``` bash
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
+------------------------------------------------------------------------
 
 ## 📂 Dataset
 
 This project uses the **7-Scenes Chess dataset**.
 
-Download and extract it automatically:
-
-```bash
+``` bash
 python -m posenerf.cli --project-dir ./workspace download-data
 ```
 
----
+------------------------------------------------------------------------
 
 ## 🧪 Commands
 
-### 🔄 Run Full Pipeline
+### 🔄 Full Pipeline
 
-Train, evaluate, estimate poses, and refine:
-
-```bash
+``` bash
 python -m posenerf.cli --project-dir ./workspace full-pipeline --download-data
 ```
 
----
+### 🏋️ Train
 
-### 🏋️ Train Only
-
-```bash
+``` bash
 python -m posenerf.cli --project-dir ./workspace train --download-data
 ```
 
----
+### 📊 Evaluate
 
-### 📊 Evaluate a Checkpoint
-
-```bash
+``` bash
 python -m posenerf.cli --project-dir ./workspace evaluate \
   --checkpoint ./workspace/outputs/checkpoints/hierarchical_nerf_trained.pth
 ```
 
----
+### 🔁 Post-train
 
-### 🔁 Post-Training (No Retraining)
-
-```bash
+``` bash
 python -m posenerf.cli --project-dir ./workspace post-train \
   --checkpoint ./workspace/outputs/checkpoints/hierarchical_nerf_trained.pth
 ```
 
----
-
-### ♻️ Force Fresh Pose Estimation
-
-```bash
-python -m posenerf.cli --project-dir ./workspace post-train \
-  --checkpoint ./workspace/outputs/checkpoints/hierarchical_nerf_trained.pth \
-  --no-pose-cache
-```
-
----
+------------------------------------------------------------------------
 
 ## 📁 Project Structure
 
-```text
-workspace/
-├── data/
-├── outputs/
-│   ├── checkpoints/
-│   ├── pose_estimation/
-│   ├── refinement/
-│   └── visualizations/
-```
+    workspace/
+    ├── data/
+    ├── outputs/
+    │   ├── checkpoints/
+    │   ├── pose_estimation/
+    │   ├── refinement/
+    │   └── visualizations/
 
----
+------------------------------------------------------------------------
 
-## 🧾 Outputs
+## 📊 Sample Results
 
-### 📌 Checkpoints
+-   **Best refinement step:** 200\
+-   **Average PSNR:** 17.69 dB\
+-   **Depth MAE:** 0.336 m
 
-- `hierarchical_nerf_trained.pth`
-- `hierarchical_nerf_best.pth`
-- `hierarchical_nerf_refined.pth`
+### Observations
 
-### 🖼️ Visualizations
+-   Refinement improves sharpness\
+-   Stable PSNR gains\
+-   Coarse geometry recovered well
 
-- Multiview evaluation results  
-- Pose estimation previews  
-- Refinement comparisons  
+------------------------------------------------------------------------
 
-### 📈 Metrics
+## 📚 Citation
 
-- `evaluation_metrics.json`  
-- `pose_metrics.json`  
-- `refinement_metrics.json`  
+-   RelocForest\
+-   7-Scenes dataset
 
----
-
-## 📚 Citation Note
-
-If you use results from the 7-Scenes dataset, please cite relevant prior work:
-
-- [RelocForest paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/RelocForests.pdf)  
-- [7-Scenes paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2013/10/glocker2013ismar.pdf)  
-
----
-
-## 📝 Notes
-
-- Use `post-train` after training to iterate quickly  
-- Cached pose estimates are reused by default  
-- Use `--no-pose-cache` to recompute poses  
-- Designed for practical experimentation with manageable resource usage  
-
----
-
-## 💬 Additional Context
-
-A reference notebook (`.ipynb`) is included for understanding the original workflow and experimentation process.  
-However, **this repository is fully script-based and does not depend on notebooks**.
-
----
+------------------------------------------------------------------------
 
 ## 🧠 Final Thoughts
 
-PoseNeRF aims to make NeRF-based pose estimation **simple, reproducible, and flexible**.
+PoseNeRF provides a clean, reproducible baseline for **NeRF-based pose
+estimation**.
 
-If you're working in 3D vision, camera localization, or neural rendering — this is a great starting point.
-
-Happy experimenting! 🚀
+Happy experimenting 🚀
