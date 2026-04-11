@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+workspace/
+data/
+outputs/
+*.pth
+*.zip
+seven_scenes_hierarchical_nerf/

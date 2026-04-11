@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "posenerf"
+version = "0.1.0"
+description = "PoseNeRF: end-to-end hierarchical NeRF pipeline for camera pose estimation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch",
+  "numpy",
+  "pillow",
+  "matplotlib",
+  "tqdm",
+  "imageio",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
