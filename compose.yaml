@@ -1,0 +1,6 @@
+services:
+  posenerf:
+    build: .
+    volumes:
+      - .:/app
+    command: python -m pytest -q

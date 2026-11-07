@@ -1,0 +1,14 @@
+{
+  "kind": "real_checkpoint_reconstruction",
+  "run": "m14_e8_d2_lrfix_500",
+  "checkpoint": "G:\\Projects\\PoseNerf\\workspace\\outputs\\m14_e8_d2_lrfix_500\\checkpoints\\hierarchical_nerf_continuation_trained.pth",
+  "continuation_success_updates": 500,
+  "source_checkpoint_step": 46799,
+  "camera_convention": "OpenCV C2W from frozen train-derived validation poses",
+  "trajectory": "linear translation + SO(3)-projected rotation interpolation",
+  "frames": 4,
+  "resolution": [
+    160,
+    120
+  ]
+}

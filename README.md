@@ -1,134 +1,53 @@
-# 🚀 PoseNeRF
+# PoseNeRF
 
-## 🚀 Introduction
+PoseNeRF is a reproducible research implementation of hierarchical neural radiance fields for RGB/depth reconstruction on Microsoft 7-Scenes Chess. It includes checkpoint-safe training, frozen train-derived validation, rendering, and experimental RGB-only localization components.
 
-**PoseNeRF** is an end-to-end implementation of a **hierarchical Neural
-Radiance Field (NeRF)** framework designed for **joint scene
-representation and camera pose estimation**.
+![Real E8-D2 reconstruction trajectory](docs/media/posenerf_demo.gif)
 
-Unlike standard NeRF pipelines that assume known camera poses, PoseNeRF
-explores a more realistic and challenging setting: **recovering accurate
-camera poses directly from images while simultaneously leveraging a
-learned radiance field**.
+The GIF is a real 160×120 render from the immutable E8-D2 terminal continuation checkpoint, using an interpolated path through frozen train-derived validation C2W poses. It is **not** a synthetic demonstration. [MP4 playback](docs/media/posenerf_demo.mp4) · [RGB/depth comparison](docs/media/posenerf_comparison.png) · [media provenance](docs/media/posenerf_demo_provenance.json).
 
-The core idea is to: - First learn a **coarse-to-fine hierarchical NeRF
-representation** of a scene\
-- Then use the learned representation as a **geometric prior** to infer
-poses for unseen views\
-- Finally refine both poses and renderings through iterative
-optimization
+## Verified reconstruction benchmark
 
-This repository translates an experimental notebook-based workflow into
-a **fully modular, script-driven pipeline**, making it easier to: -
-Reproduce results consistently\
-- Run large-scale experiments\
-- Integrate into research or production workflows
+Frozen 12-view, train-derived Chess validation; 48 coarse + 48 fine samples; same masks and preprocessing for every value. These are validation metrics, not held-out test or localization claims.
 
-The pipeline reflects a practical research setup: - Controlled training
-with reduced computational overhead\
-- Explicit separation of training, evaluation, pose estimation, and
-refinement stages\
-- Support for re-running downstream tasks without retraining
+| Checkpoint | PSNR ↑ | Global SSIM ↑ | Depth MAE ↓ | RMSE ↓ | AbsRel ↓ | Mean / P95 render latency | Peak CUDA memory |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| E8-D2 terminal continuation (500 updates, depth weight 0.15) | 18.8159 dB | 0.8150 | 0.13685 m | 0.19939 m | 0.07402 | 3434.4 / 3656.8 ms | 456.6 MiB |
 
-------------------------------------------------------------------------
+The evaluated model is 10 layers × 512 hidden units, **5,662,216 parameters**. Its terminal export SHA-256 is `30dc02247990daa3fb0bd67ccb054051b5dcf4dfafc4aec7638b5ada0fd26710`. Full per-view evidence remains outside Git in the immutable evaluation artifacts.
 
-## ✨ Features
+## Reproduce the render
 
--   📦 Automatic dataset download\
--   🧠 Hierarchical NeRF training\
--   🎥 Multiview evaluation\
--   📍 Camera pose estimation on unseen frames\
--   🔧 Pose refinement pipeline\
--   ⚡ Post-training reruns without retraining
+```powershell
+.\.venv\Scripts\python.exe scripts\render_reconstruction_video.py `
+  --run workspace\outputs\m14_e8_d2_lrfix_500 --frames 4 --fps 3 --output docs\media
+```
 
-------------------------------------------------------------------------
+The renderer uses the existing `HierarchicalNeRF`, `get_ray_directions`, and `render_image` implementation; no parallel NeRF model or camera pipeline is introduced. The recorded camera convention is OpenCV C2W, and the path is translation interpolation plus SO(3)-projected rotation interpolation.
 
-## ⚙️ Setup
+## Architecture
 
-``` bash
+- Hierarchical coarse/fine radiance fields with positional encoding and volumetric rendering.
+- 10-layer, width-512 E8 fields; 48+48 samples at the frozen evaluation setting.
+- AMP-aware gradient accumulation, atomic full-state checkpoints, scheduler/RNG/sampler restoration, and independent thermal watchdog support.
+
+## Installation and tests
+
+```powershell
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pytest -q
 ```
 
-------------------------------------------------------------------------
+## Notebook and containers
 
-## 📂 Dataset
+`PoseNeRF_End_to_End.ipynb` is the existing project walkthrough. It uses project modules and is therefore not a portable standalone notebook. A fully standalone rendering notebook remains a follow-up item; it must only accept explicitly compatible checkpoints and must not alter them.
 
-This project uses the **7-Scenes Chess dataset**.
+Container assets are not yet included in this repository. Use the native environment above; do not treat the secondary `NeRF-Video-Studio` project’s Docker files as PoseNeRF deployment support.
 
-``` bash
-python -m posenerf.cli --project-dir ./workspace download-data
-```
+## Attribution and limitations
 
-------------------------------------------------------------------------
+The implementation is independently written and informed by [bmild/nerf](https://github.com/bmild/nerf) and the NeRF paper. It does not bundle that repository’s data, checkpoints, or code.
 
-## 🧪 Commands
-
-### 🔄 Full Pipeline
-
-``` bash
-python -m posenerf.cli --project-dir ./workspace full-pipeline --download-data
-```
-
-### 🏋️ Train
-
-``` bash
-python -m posenerf.cli --project-dir ./workspace train --download-data
-```
-
-### 📊 Evaluate
-
-``` bash
-python -m posenerf.cli --project-dir ./workspace evaluate \
-  --checkpoint ./workspace/outputs/checkpoints/hierarchical_nerf_trained.pth
-```
-
-### 🔁 Post-train
-
-``` bash
-python -m posenerf.cli --project-dir ./workspace post-train \
-  --checkpoint ./workspace/outputs/checkpoints/hierarchical_nerf_trained.pth
-```
-
-------------------------------------------------------------------------
-
-## 📁 Project Structure
-
-    workspace/
-    ├── data/
-    ├── outputs/
-    │   ├── checkpoints/
-    │   ├── pose_estimation/
-    │   ├── refinement/
-    │   └── visualizations/
-
-------------------------------------------------------------------------
-
-## 📊 Sample Results
-
--   **Best refinement step:** 200\
--   **Average PSNR:** 17.69 dB\
--   **Depth MAE:** 0.336 m
-
-### Observations
-
--   Refinement improves sharpness\
--   Stable PSNR gains\
--   Coarse geometry recovered well
-
-------------------------------------------------------------------------
-
-## 📚 Citation
-
--   RelocForest\
--   7-Scenes dataset
-
-------------------------------------------------------------------------
-
-## 🧠 Final Thoughts
-
-PoseNeRF provides a clean, reproducible baseline for **NeRF-based pose
-estimation**.
-
-Happy experimenting 🚀
+Results are limited to the documented Chess protocols and hardware. Validation reconstruction does not establish held-out localization accuracy, real-time performance, deployment performance, or generalization to other scenes. Existing checkpoints, frozen protocols, and historical artifacts are preserved and excluded from version control.

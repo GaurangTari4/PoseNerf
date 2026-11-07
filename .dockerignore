@@ -1,0 +1,11 @@
+.git
+.venv
+.pytest_cache
+workspace
+data
+outputs
+e8_logs
+e8_execution_logs
+__pycache__
+*.pth
+*.zip
