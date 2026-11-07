@@ -11,7 +11,7 @@ from tqdm import tqdm
 from .config import ExperimentConfig, PathsConfig
 from .data import LoadedDataset
 from .model import HierarchicalNeRF, get_rays, render_image, render_rays
-from .utils import save_json
+from .utils import safe_torch_load, save_json
 from .visualize import save_refinement_figure
 
 
@@ -60,11 +60,6 @@ def run_refinement(model: HierarchicalNeRF, baseline_model: HierarchicalNeRF, da
     refine_depths = dataset.train_depths[:refine_train_count]
     refine_masks = dataset.train_masks[:refine_train_count]
     refine_poses = dataset.train_poses[:refine_train_count].clone()
-    if pose_summaries:
-        refine_images = torch.cat([refine_images, torch.stack([summary["target_rgb"] for summary in pose_summaries], dim=0)], dim=0)
-        refine_depths = torch.cat([refine_depths, torch.stack([summary["target_depth"] for summary in pose_summaries], dim=0)], dim=0)
-        refine_masks = torch.cat([refine_masks, torch.stack([summary["target_mask"] for summary in pose_summaries], dim=0)], dim=0)
-        refine_poses = torch.cat([refine_poses, torch.stack([summary["est_pose"] for summary in pose_summaries], dim=0)], dim=0)
     train_rays_o, train_rays_d, train_rgb_pool, train_depth_pool, train_mask_pool = build_refined_ray_pool(
         refine_images, refine_depths, refine_masks, refine_poses, ray_dirs_cam
     )
@@ -80,16 +75,24 @@ def run_refinement(model: HierarchicalNeRF, baseline_model: HierarchicalNeRF, da
     refined_ckpt = paths.checkpoints_dir / "hierarchical_nerf_refined.pth"
     refine_data_config = {
         "refine_train_count": refine_train_count,
-        "refine_pose_count": len(pose_summaries),
-        "pose_eval_indices": [int(summary["index"]) for summary in pose_summaries],
+        "refine_pose_count": 0,
+        "pose_eval_indices": [],
     }
     refine_start_step = 0
-    before_stats, before_psnr, before_depth_mae = evaluate_refinement_views(baseline_model, dataset, ray_dirs_cam, config, refine_eval_indices)
+    # Select refinement checkpoints on validation frames only. Final test evaluation happens in the CLI.
+    validation_dataset = LoadedDataset(
+        train_frames=dataset.train_frames, val_frames=dataset.val_frames, test_frames=dataset.test_frames,
+        train_images=dataset.train_images, train_depths=dataset.train_depths, train_masks=dataset.train_masks, train_poses=dataset.train_poses,
+        val_images=dataset.val_images, val_depths=dataset.val_depths, val_masks=dataset.val_masks, val_poses=dataset.val_poses,
+        test_images=dataset.val_images, test_depths=dataset.val_depths, test_masks=dataset.val_masks, test_poses=dataset.val_poses,
+    )
+    refine_eval_indices = list(range(min(refine_cfg.frame_count, len(dataset.val_images))))
+    before_stats, before_psnr, before_depth_mae = evaluate_refinement_views(baseline_model, validation_dataset, ray_dirs_cam, config, refine_eval_indices)
     best_psnr = before_psnr
     best_step = -1
     best_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
     if refine_cfg.resume and refine_resume_path.exists():
-        refine_state = torch.load(refine_resume_path, map_location=device)
+        refine_state = safe_torch_load(refine_resume_path, device)
         if refine_state.get("refine_data_config") == refine_data_config:
             model.load_state_dict(refine_state["model_state_dict"])
             optimizer.load_state_dict(refine_state["optimizer_state_dict"])
@@ -123,7 +126,7 @@ def run_refinement(model: HierarchicalNeRF, baseline_model: HierarchicalNeRF, da
         scheduler.step()
         should_eval = (((step + 1) % refine_cfg.eval_every) == 0) or ((step + 1) == refine_cfg.steps)
         if should_eval:
-            eval_stats, eval_psnr, eval_depth_mae = evaluate_refinement_views(model, dataset, ray_dirs_cam, config, refine_eval_indices)
+            eval_stats, eval_psnr, eval_depth_mae = evaluate_refinement_views(model, validation_dataset, ray_dirs_cam, config, refine_eval_indices)
             if eval_psnr > best_psnr:
                 best_psnr = eval_psnr
                 best_step = step
@@ -159,7 +162,7 @@ def run_refinement(model: HierarchicalNeRF, baseline_model: HierarchicalNeRF, da
             )
     model.load_state_dict(best_state_dict)
     model.eval()
-    after_stats, after_psnr, after_depth_mae = evaluate_refinement_views(model, dataset, ray_dirs_cam, config, refine_eval_indices)
+    after_stats, after_psnr, after_depth_mae = evaluate_refinement_views(model, validation_dataset, ray_dirs_cam, config, refine_eval_indices)
     save_refinement_figure(before_stats, after_stats, before_psnr, after_psnr, after_depth_mae, paths.refinement_dir / "hierarchical_nerf_refinement_multiview.png")
     save_json(
         paths.refinement_dir / "refinement_metrics.json",

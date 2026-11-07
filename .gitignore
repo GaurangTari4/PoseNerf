@@ -7,3 +7,6 @@ outputs/
 *.pth
 *.zip
 seven_scenes_hierarchical_nerf/
+.pytest_cache/
+e8_execution_logs/
+e8_logs/

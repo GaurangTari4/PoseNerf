@@ -8,9 +8,10 @@ import torch
 
 
 CHESS_URL = (
-    "https://download.microsoft.com/download/4/9/4/"
-    "4945E6F5-16A1-4E28-BD35-82D6EAFB8A9B/chess.zip"
+    "https://download.microsoft.com/download/2/8/5/"
+    "28564B23-0828-408F-8631-23B1EFF1DAC8/chess.zip"
 )
+CHESS_ARCHIVE_SIZE_BYTES = 3_079_608_937
 
 
 @dataclass
@@ -54,8 +55,12 @@ class SceneConfig:
 @dataclass
 class TrainConfig:
     max_train_images: int = 96
+    max_val_images: int = 12
     max_test_images: int = 12
+    val_fraction: float = 0.10
     batch_rays: int = 1024
+    accumulation_steps: int = 1  # microbatches per optimizer/scheduler update
+    optimizer_pause_seconds: float = 0.0  # optional post-update thermal duty-cycle pacing
     num_steps: int = 12000
     lr: float = 2.0e-4
     num_coarse_samples: int = 48
@@ -67,6 +72,12 @@ class TrainConfig:
     val_frame_count: int = 4
     use_amp: bool = True
     resume: bool = True
+    on_demand_ray_sampling: bool = True
+    # Opt-in sampling treatment.  A zero fraction preserves the legacy
+    # independent uniform frame/pixel sampler exactly.
+    edge_sampling_fraction: float = 0.0
+    edge_threshold: float = 0.20
+    stop_after_step: int | None = None  # test-only controlled interruption; excluded from experiment signature
 
     @property
     def num_samples(self) -> int:
@@ -88,16 +99,9 @@ class PoseConfig:
     batch_rays: int = 512
     lr: float = 3.0e-3
     rgb_loss_weight: float = 1.0
-    depth_loss_weight: float = 0.20
-    init_rot_perturb_deg: float = 3.0
-    init_trans_perturb: tuple[float, float, float] = (0.03, -0.02, 0.03)
     frame_count: int = 4
     render_coarse_samples: int = 32
     render_fine_samples: int = 32
-
-    def init_trans_tensor(self, device: torch.device) -> torch.Tensor:
-        return torch.tensor(self.init_trans_perturb, dtype=torch.float32, device=device)
-
 
 @dataclass
 class RefinementConfig:
@@ -141,7 +145,11 @@ class ExperimentConfig:
             "profile": "laptop-rtx2060",
             "downsample": self.scene.downsample,
             "max_train_images": self.train.max_train_images,
+            "max_val_images": self.train.max_val_images,
+            "val_fraction": self.train.val_fraction,
             "batch_rays": self.train.batch_rays,
+            "accumulation_steps": self.train.accumulation_steps,
+            "optimizer_pause_seconds": self.train.optimizer_pause_seconds,
             "num_steps": self.train.num_steps,
             "lr": self.train.lr,
             "near": self.scene.near,
@@ -150,6 +158,8 @@ class ExperimentConfig:
             "num_fine_samples": self.train.num_fine_samples,
             "rgb_loss_weight": self.train.rgb_loss_weight,
             "depth_loss_weight": self.train.depth_loss_weight,
+            "edge_sampling_fraction": self.train.edge_sampling_fraction,
+            "edge_threshold": self.train.edge_threshold,
             "model_hidden": self.model.hidden,
             "model_layers": self.model.layers,
             "pos_freqs": self.model.pos_freqs,

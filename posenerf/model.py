@@ -71,7 +71,9 @@ class RadianceField(nn.Module):
             if i == self.skip_layer:
                 h = torch.cat([h, xyz_enc], dim=-1)
             h = F.relu(layer(h))
-        sigma = F.relu(self.sigma_head(h))
+        # Softplus avoids a fully dead density field at initialization while
+        # retaining non-negative volume densities.
+        sigma = F.softplus(self.sigma_head(h))
         feat = self.feature_head(h)
         rgb = self.color_head(torch.cat([feat, dir_enc], dim=-1))
         return rgb, sigma
@@ -128,7 +130,7 @@ def sample_pdf(bins: torch.Tensor, weights: torch.Tensor, num_samples: int, dete
     cdf = torch.cat([torch.zeros_like(cdf[:, :1]), cdf], dim=-1)
     if deterministic:
         u = torch.linspace(0.5 / num_samples, 1.0 - 0.5 / num_samples, num_samples, device=bins.device)
-        u = u.expand(cdf.shape[0], num_samples)
+        u = u.expand(cdf.shape[0], num_samples).contiguous()
     else:
         u = torch.rand(cdf.shape[0], num_samples, device=bins.device)
     inds = torch.searchsorted(cdf, u, right=True)
@@ -151,6 +153,8 @@ def render_rays(
     perturb: bool = True,
     num_coarse_samples: int | None = None,
     num_fine_samples: int | None = None,
+    return_coarse: bool = False,
+    return_diagnostics: bool = False,
 ) -> tuple[torch.Tensor, ...]:
     train_cfg = config.train
     coarse_samples = num_coarse_samples if num_coarse_samples is not None else train_cfg.num_coarse_samples
@@ -158,15 +162,21 @@ def render_rays(
     z_coarse = sample_coarse_z_vals(rays_o, config.scene.near, config.scene.far, coarse_samples, perturb)
     coarse_rgb, coarse_depth, coarse_acc, coarse_weights = run_field(model.coarse, rays_o, rays_d, z_coarse)
     if fine_samples <= 0:
-        return coarse_rgb, coarse_depth, coarse_acc
+        result = (coarse_rgb, coarse_depth, coarse_acc, coarse_rgb, coarse_depth, coarse_acc) if return_coarse else (coarse_rgb, coarse_depth, coarse_acc)
+        return (*result, {"coarse_z_vals": z_coarse.detach(), "coarse_weights": coarse_weights.detach(), "fine_z_vals": z_coarse.detach(), "fine_weights": coarse_weights.detach()}) if return_diagnostics else result
     z_mids = 0.5 * (z_coarse[:, :-1] + z_coarse[:, 1:])
     z_fine = sample_pdf(z_mids, coarse_weights[:, 1:-1].detach(), fine_samples, deterministic=not perturb)
     z_all = torch.sort(torch.cat([z_coarse, z_fine], dim=-1), dim=-1).values
-    fine_rgb, fine_depth, fine_acc, _ = run_field(model.fine, rays_o, rays_d, z_all)
-    return fine_rgb, fine_depth, fine_acc
+    fine_rgb, fine_depth, fine_acc, fine_weights = run_field(model.fine, rays_o, rays_d, z_all)
+    diagnostics = {"coarse_z_vals": z_coarse.detach(), "coarse_weights": coarse_weights.detach(), "fine_z_vals": z_all.detach(), "fine_weights": fine_weights.detach()}
+    if return_coarse:
+        result = (fine_rgb, fine_depth, fine_acc, coarse_rgb, coarse_depth, coarse_acc)
+    else:
+        result = (fine_rgb, fine_depth, fine_acc)
+    return (*result, diagnostics) if return_diagnostics else result
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def render_image(
     model: HierarchicalNeRF,
     c2w: torch.Tensor,

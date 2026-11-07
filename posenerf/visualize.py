@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
+import matplotlib
+# Training and CI save files only; choosing a GUI backend makes unattended
+# rendering depend on a local Tk installation.
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import torch
 

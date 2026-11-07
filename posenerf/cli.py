@@ -13,6 +13,11 @@ from .utils import get_device, seed_everything
 from .visualize import save_eval_figure
 
 
+def _checkpoint_identity(checkpoint: Path) -> str:
+    stat = checkpoint.stat()
+    return f"{checkpoint.resolve()}:{stat.st_size}:{stat.st_mtime_ns}"
+
+
 def build_runtime(args):
     config = ExperimentConfig()
     device = get_device()
@@ -43,9 +48,11 @@ def cmd_train(args):
 def cmd_evaluate(args):
     config, device, paths, dataset, ray_dirs_cam, model, baseline_model = build_runtime(args)
     checkpoint = Path(args.checkpoint) if args.checkpoint else paths.checkpoints_dir / "hierarchical_nerf_trained.pth"
-    load_checkpoint(model, baseline_model, checkpoint, device)
+    load_checkpoint(model, baseline_model, checkpoint, device, config)
     frame_indices = list(range(min(config.train.val_frame_count, len(dataset.test_images))))
-    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(model, dataset, ray_dirs_cam, config, frame_indices)
+    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(
+        model, dataset.test_images, dataset.test_depths, dataset.test_masks, dataset.test_poses, ray_dirs_cam, config, frame_indices
+    )
     save_eval_figure(rendered, metrics, avg_psnr, avg_depth_mae, paths.visualizations_dir / "checkpoint_eval_multiview.png")
     save_evaluation_metrics(paths, metrics, avg_psnr, avg_depth_mae)
 
@@ -53,24 +60,32 @@ def cmd_evaluate(args):
 def cmd_post_train(args):
     config, device, paths, dataset, ray_dirs_cam, model, baseline_model = build_runtime(args)
     checkpoint = Path(args.checkpoint) if args.checkpoint else paths.checkpoints_dir / "hierarchical_nerf_trained.pth"
-    load_checkpoint(model, baseline_model, checkpoint, device)
+    load_checkpoint(model, baseline_model, checkpoint, device, config)
     frame_indices = list(range(min(config.train.val_frame_count, len(dataset.test_images))))
-    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(model, dataset, ray_dirs_cam, config, frame_indices)
+    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(
+        model, dataset.test_images, dataset.test_depths, dataset.test_masks, dataset.test_poses, ray_dirs_cam, config, frame_indices
+    )
     save_eval_figure(rendered, metrics, avg_psnr, avg_depth_mae, paths.visualizations_dir / "checkpoint_eval_multiview.png")
     save_evaluation_metrics(paths, metrics, avg_psnr, avg_depth_mae)
-    pose_summaries = run_pose_estimation(model, dataset, ray_dirs_cam, config, paths, device, use_cache=(not args.no_pose_cache))
+    pose_summaries = run_pose_estimation(model, dataset, ray_dirs_cam, config, paths, device, checkpoint_id=_checkpoint_identity(checkpoint), use_cache=(not args.no_pose_cache))
     run_refinement(model, baseline_model, dataset, ray_dirs_cam, pose_summaries, config, paths, device)
+    metrics, _, avg_psnr, avg_depth_mae = evaluate_model(model, dataset.test_images, dataset.test_depths, dataset.test_masks, dataset.test_poses, ray_dirs_cam, config, frame_indices)
+    save_evaluation_metrics(paths, metrics, avg_psnr, avg_depth_mae, "refined_test_metrics.json")
 
 
 def cmd_full_pipeline(args):
     config, device, paths, dataset, ray_dirs_cam, model, baseline_model = build_runtime(args)
-    train_model(model, baseline_model, dataset, ray_dirs_cam, config, paths, device)
+    checkpoint = train_model(model, baseline_model, dataset, ray_dirs_cam, config, paths, device)
     frame_indices = list(range(min(config.train.val_frame_count, len(dataset.test_images))))
-    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(model, dataset, ray_dirs_cam, config, frame_indices)
+    metrics, rendered, avg_psnr, avg_depth_mae = evaluate_model(
+        model, dataset.test_images, dataset.test_depths, dataset.test_masks, dataset.test_poses, ray_dirs_cam, config, frame_indices
+    )
     save_eval_figure(rendered, metrics, avg_psnr, avg_depth_mae, paths.visualizations_dir / "checkpoint_eval_multiview.png")
     save_evaluation_metrics(paths, metrics, avg_psnr, avg_depth_mae)
-    pose_summaries = run_pose_estimation(model, dataset, ray_dirs_cam, config, paths, device, use_cache=False)
+    pose_summaries = run_pose_estimation(model, dataset, ray_dirs_cam, config, paths, device, checkpoint_id=_checkpoint_identity(checkpoint), use_cache=False)
     run_refinement(model, baseline_model, dataset, ray_dirs_cam, pose_summaries, config, paths, device)
+    metrics, _, avg_psnr, avg_depth_mae = evaluate_model(model, dataset.test_images, dataset.test_depths, dataset.test_masks, dataset.test_poses, ray_dirs_cam, config, frame_indices)
+    save_evaluation_metrics(paths, metrics, avg_psnr, avg_depth_mae, "refined_test_metrics.json")
 
 
 def build_parser() -> argparse.ArgumentParser:
